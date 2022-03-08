@@ -277,6 +277,265 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_handle_record_two_clients_three_deposits_two_withdrawals_one_dispute(){
+        let client1deposit1 = Transaction{
+            trans_type: "Deposit".to_string(),
+            client: 1,
+            id: 1,
+            amount: 2.0
+        };
+
+        let client1withdrawal1 = Transaction{
+            trans_type: "Withdrawal".to_string(),
+            client: 1,
+            id: 2,
+            amount: 1.0
+        };
+
+        let client2deposit2 = Transaction{
+            trans_type: "Deposit".to_string(),
+            client: 2,
+            id: 3,
+            amount: 3.0
+        };
+
+        let client2withdrawal2 = Transaction{
+            trans_type: "Withdrawal".to_string(),
+            client: 2,
+            id: 4,
+            amount: 1.75
+        };
+
+        let client2deposit3 = Transaction{
+            trans_type: "Deposit".to_string(),
+            client: 2,
+            id: 5,
+            amount: 3.0
+        };
+
+        let client2dispute1 = Transaction{
+            trans_type: "Dispute".to_string(),
+            client: 2,
+            id: 5,
+            amount: 0.0
+        };
+
+        let mut accounts: HashMap<u16, AccountInfo> = HashMap::new();
+        let mut transactions: HashMap<u16, HashMap<u32, TransactionStatus>> = HashMap::new();
+
+        handle_record(&mut accounts, &mut transactions, client1deposit1);
+        handle_record(&mut accounts, &mut transactions, client1withdrawal1);
+        handle_record(&mut accounts, &mut transactions, client2deposit2);
+        handle_record(&mut accounts, &mut transactions, client2withdrawal2);
+        handle_record(&mut accounts, &mut transactions, client2deposit3);
+        handle_record(&mut accounts, &mut transactions, client2dispute1);
+
+        let expected_client1_account_info = AccountInfo{
+            available: 1.0,
+            held: 0.0,
+            total: 1.0,
+            locked: false
+        };
+
+        let expected_client2_account_info = AccountInfo{
+            available: 1.25,
+            held: 3.0,
+            total: 4.25,
+            locked: false
+        };
+
+        let client1_account = accounts.get(&1).unwrap();
+        assert_eq!(client1_account.total, expected_client1_account_info.total);
+        assert_eq!(client1_account.held, expected_client1_account_info.held);
+        assert_eq!(client1_account.available, expected_client1_account_info.available);
+        assert_eq!(client1_account.locked, expected_client1_account_info.locked);
+
+        let client2_account = accounts.get(&2).unwrap();
+        assert_eq!(client2_account.total, expected_client2_account_info.total);
+        assert_eq!(client2_account.held, expected_client2_account_info.held);
+        assert_eq!(client2_account.available, expected_client2_account_info.available);
+        assert_eq!(client2_account.locked, expected_client2_account_info.locked);
+    }
+
+    #[test]
+    fn test_handle_record_three_deposits_two_withdrawals_one_dispute_one_resolve(){
+        let client1deposit1 = Transaction{
+            trans_type: "Deposit".to_string(),
+            client: 1,
+            id: 1,
+            amount: 2.0
+        };
+
+        let client1withdrawal1 = Transaction{
+            trans_type: "Withdrawal".to_string(),
+            client: 1,
+            id: 2,
+            amount: 1.0
+        };
+
+        let client2deposit2 = Transaction{
+            trans_type: "Deposit".to_string(),
+            client: 2,
+            id: 3,
+            amount: 3.0
+        };
+
+        let client2withdrawal2 = Transaction{
+            trans_type: "Withdrawal".to_string(),
+            client: 2,
+            id: 4,
+            amount: 1.75
+        };
+
+        let client2deposit3 = Transaction{
+            trans_type: "Deposit".to_string(),
+            client: 2,
+            id: 5,
+            amount: 3.0
+        };
+
+        let client2dispute1 = Transaction{
+            trans_type: "Dispute".to_string(),
+            client: 2,
+            id: 5,
+            amount: 0.0
+        };
+
+        let client2resolve1 = Transaction{
+            trans_type: "Resolve".to_string(),
+            client: 2,
+            id: 5,
+            amount: 0.0
+        };
+
+        let mut accounts: HashMap<u16, AccountInfo> = HashMap::new();
+        let mut transactions: HashMap<u16, HashMap<u32, TransactionStatus>> = HashMap::new();
+
+        handle_record(&mut accounts, &mut transactions, client1deposit1);
+        handle_record(&mut accounts, &mut transactions, client1withdrawal1);
+        handle_record(&mut accounts, &mut transactions, client2deposit2);
+        handle_record(&mut accounts, &mut transactions, client2withdrawal2);
+        handle_record(&mut accounts, &mut transactions, client2deposit3);
+        handle_record(&mut accounts, &mut transactions, client2dispute1);
+        handle_record(&mut accounts, &mut transactions, client2resolve1);
+
+        let expected_client1_account_info = AccountInfo{
+            available: 1.0,
+            held: 0.0,
+            total: 1.0,
+            locked: false
+        };
+
+        let expected_client2_account_info = AccountInfo{
+            available: 4.25,
+            held: 0.0,
+            total: 4.25,
+            locked: false
+        };
+
+        let client1_account = accounts.get(&1).unwrap();
+        assert_eq!(client1_account.total, expected_client1_account_info.total);
+        assert_eq!(client1_account.held, expected_client1_account_info.held);
+        assert_eq!(client1_account.available, expected_client1_account_info.available);
+        assert_eq!(client1_account.locked, expected_client1_account_info.locked);
+
+        let client2_account = accounts.get(&2).unwrap();
+        assert_eq!(client2_account.total, expected_client2_account_info.total);
+        assert_eq!(client2_account.held, expected_client2_account_info.held);
+        assert_eq!(client2_account.available, expected_client2_account_info.available);
+        assert_eq!(client2_account.locked, expected_client2_account_info.locked);
+    }
+
+    #[test]
+    fn test_handle_record_three_deposits_two_withdrawals_one_dispute_one_chargeback(){
+        let client1deposit1 = Transaction{
+            trans_type: "Deposit".to_string(),
+            client: 1,
+            id: 1,
+            amount: 2.0
+        };
+
+        let client1withdrawal1 = Transaction{
+            trans_type: "Withdrawal".to_string(),
+            client: 1,
+            id: 2,
+            amount: 1.0
+        };
+
+        let client2deposit2 = Transaction{
+            trans_type: "Deposit".to_string(),
+            client: 2,
+            id: 3,
+            amount: 3.0
+        };
+
+        let client2withdrawal2 = Transaction{
+            trans_type: "Withdrawal".to_string(),
+            client: 2,
+            id: 4,
+            amount: 1.75
+        };
+
+        let client2deposit3 = Transaction{
+            trans_type: "Deposit".to_string(),
+            client: 2,
+            id: 5,
+            amount: 3.0
+        };
+
+        let client2dispute1 = Transaction{
+            trans_type: "Dispute".to_string(),
+            client: 2,
+            id: 5,
+            amount: 0.0
+        };
+
+        let client2resolve1 = Transaction{
+            trans_type: "Chargeback".to_string(),
+            client: 2,
+            id: 5,
+            amount: 0.0
+        };
+
+        let mut accounts: HashMap<u16, AccountInfo> = HashMap::new();
+        let mut transactions: HashMap<u16, HashMap<u32, TransactionStatus>> = HashMap::new();
+
+        handle_record(&mut accounts, &mut transactions, client1deposit1);
+        handle_record(&mut accounts, &mut transactions, client1withdrawal1);
+        handle_record(&mut accounts, &mut transactions, client2deposit2);
+        handle_record(&mut accounts, &mut transactions, client2withdrawal2);
+        handle_record(&mut accounts, &mut transactions, client2deposit3);
+        handle_record(&mut accounts, &mut transactions, client2dispute1);
+        handle_record(&mut accounts, &mut transactions, client2resolve1);
+
+        let expected_client1_account_info = AccountInfo{
+            available: 1.0,
+            held: 0.0,
+            total: 1.0,
+            locked: false
+        };
+
+        let expected_client2_account_info = AccountInfo{
+            available: 1.25,
+            held: 0.0,
+            total: 1.25,
+            locked: true
+        };
+
+        let client1_account = accounts.get(&1).unwrap();
+        assert_eq!(client1_account.total, expected_client1_account_info.total);
+        assert_eq!(client1_account.held, expected_client1_account_info.held);
+        assert_eq!(client1_account.available, expected_client1_account_info.available);
+        assert_eq!(client1_account.locked, expected_client1_account_info.locked);
+
+        let client2_account = accounts.get(&2).unwrap();
+        assert_eq!(client2_account.total, expected_client2_account_info.total);
+        assert_eq!(client2_account.held, expected_client2_account_info.held);
+        assert_eq!(client2_account.available, expected_client2_account_info.available);
+        assert_eq!(client2_account.locked, expected_client2_account_info.locked);
+    }
+
+    #[test]
     fn test_handle_chargeback_with_deposit_disputed() {
         let client: u16 = 1;
         let trans_id: u32 = 1;
