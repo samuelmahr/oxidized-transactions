@@ -3,26 +3,29 @@ Simple toy payments engine written in Rust that reads a series of transactions
 from a CSV, updates client accounts, handles disputes and chargebacks, and then outputs the
 state of clients accounts as a CSV.
 
-# Cases to Test
-A bunch of test cases to test for one account at a time.
-Once all test cases pass, then add in multiple clients in the file
+# Implementation
+This describes how the code was written to implement expectations of the prompt
+- Uses a reader to read one line at a time from the file
+- Uses `serde` to deserialize the csv into a struct
+- Invalid data types will be set to default values of Transaction struct and ignored
+- Handle transaction types as case-insensitive
+- No action is taken on `0.0` amounts for deposits and withdrawals
+- There is a map that contains known transactions for a client, used to track transactions for disputes/resolves/chargebacks
+  - k: client
+  - v: tx -> transaction record
+- There is a map that contains the latest account info for a client
+  - k: client
+  - v: AccountInfo struct
+- Once an account is locked, all the records for the client is skipped and the transactions removed from the transaction map.
+- separate functions to handle per transaction types to make for easier updates and unit testing
+- 95% line coverage in unit tests
 
-## Deposits only
-Ensure total amount is meets expected.
+# Testing
+Unit tests are the main cases I tested with csv file
 
-## Withdrawals only
-1. Start with massive deposit and withdraw money
-2. Start with small deposit and withdraw money until insufficient funds
+# Assumptions
+- Chargebacks can only be done on deposits
+- There can be many disputes on a single transaction if it has been resolved for each dispute
 
-## Dispute
-1. Single deposit, single withdrawal, dispute the withdrawal
-2. Single deposit, single withdrawal, dispute with nonexistent transaction ID
-3. Test scenario 1, but with 0 available funds
-
-## Resolve
-1. Single deposit, single withdrawal, dispute the withdrawal, resolve dispute 
-2. Single deposit, single withdrawal, dispute the withdrawal, resolve dispute with nonexistent transaction ID
-3. Test scenario 1, but with 0 available funds at dispute, resolved with funds returned
-
-## Chargeback
-1. Single deposit, dispute the deposit, chargeback -- freeze account
+# Questions
+- Do chargebacks work on withdrawals? That was not the malicious behavior described in prompt
