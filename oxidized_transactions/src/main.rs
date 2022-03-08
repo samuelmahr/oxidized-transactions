@@ -62,42 +62,7 @@ fn main() -> Result<(), Error> {
 
     for result in rdr.deserialize() {
         let transaction: Transaction = result?;
-        let amount = transaction.amount;
-        let client = transaction.client;
-        let trans_type = transaction.trans_type.to_lowercase();
-        let trans_id = transaction.id;
-
-        // only handles records with valid data
-        // amount can be 0.0 (default f64) in the case of withdrawal, dispute, chargeback
-        // exit early/go to next line if amount 0.0 for deposit or withdrawal, it is invalid
-        if transaction.client > 0 && transaction.id > 0 && !is_client_locked(accounts.get(&client)) {
-            match &*trans_type {
-                "deposit" => {
-                    if amount == 0.0 {
-                        continue;
-                    }
-
-                    handle_deposit(&mut accounts, &mut transaction_status, amount, &client, trans_id);
-                }
-                "withdrawal" => {
-                    if amount == 0.0 {
-                        continue;
-                    }
-
-                    handle_withdrawal(&mut accounts, &mut transaction_status, amount, &client, trans_id)
-                }
-                "dispute" => {
-                    handle_dispute(&mut accounts, &mut transaction_status, &client, &trans_id)
-                }
-                "resolve" => {
-                    handle_resolve(&mut accounts, &mut transaction_status, &client, &trans_id)
-                }
-                "chargeback" => {
-                    handle_chargeback(&mut accounts, &mut transaction_status, &client, &trans_id)
-                }
-                _ => {}
-            }
-        }
+        handle_record(&mut accounts, &mut transaction_status, transaction)
     }
 
     println!("client,available,held,total,locked");
@@ -107,6 +72,45 @@ fn main() -> Result<(), Error> {
     }
 
     Ok(())
+}
+
+fn handle_record(mut accounts: &mut HashMap<u16, AccountInfo>, mut transaction_status: &mut HashMap<u16, HashMap<u32, TransactionStatus>>, transaction: Transaction) {
+    let amount = transaction.amount;
+    let client = transaction.client;
+    let trans_type = transaction.trans_type.to_lowercase();
+    let trans_id = transaction.id;
+
+    // only handles records with valid data
+    // amount can be 0.0 (default f64) in the case of withdrawal, dispute, chargeback
+    // exit early if amount 0.0 for deposit or withdrawal, it is invalid
+    if transaction.client > 0 && transaction.id > 0 && !is_client_locked(accounts.get(&client)) {
+        match &*trans_type {
+            "deposit" => {
+                if amount == 0.0 {
+                    return;
+                }
+
+                handle_deposit(&mut accounts, &mut transaction_status, amount, &client, trans_id);
+            }
+            "withdrawal" => {
+                if amount == 0.0 {
+                    return;
+                }
+
+                handle_withdrawal(&mut accounts, &mut transaction_status, amount, &client, trans_id)
+            }
+            "dispute" => {
+                handle_dispute(&mut accounts, &mut transaction_status, &client, &trans_id)
+            }
+            "resolve" => {
+                handle_resolve(&mut accounts, &mut transaction_status, &client, &trans_id)
+            }
+            "chargeback" => {
+                handle_chargeback(&mut accounts, &mut transaction_status, &client, &trans_id)
+            }
+            _ => {}
+        }
+    }
 }
 
 fn handle_chargeback(accounts: &mut HashMap<u16, AccountInfo>, transaction_status: &mut HashMap<u16, HashMap<u32, TransactionStatus>>, client: &u16, trans_id: &u32) {
