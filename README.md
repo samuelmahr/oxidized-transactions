@@ -5,7 +5,8 @@ state of clients accounts as a CSV.
 
 # Implementation
 This describes how the code was written to implement expectations of the prompt
-- Uses a reader to read one line at a time from the file
+- Input file needs to be in `oxidized_transactions` package to run as prompt asks `cargo run -- transactions.csv > accounts.csv`
+- Uses a csv reader to read one line at a time from the file
 - Uses `serde` to deserialize the csv into a struct
 - Invalid data types will be set to default values of Transaction struct and ignored
 - Handle transaction types as case-insensitive
