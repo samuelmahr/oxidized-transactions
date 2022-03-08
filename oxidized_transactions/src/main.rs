@@ -75,7 +75,7 @@ fn main() -> Result<(), Error> {
                         continue
                     }
 
-                    handle_deposit_record(&mut accounts, &mut transaction_status, amount, &client, trans_id);
+                    handle_deposit(&mut accounts, &mut transaction_status, amount, &client, trans_id);
                 }
                 "withdrawal" => {
                     if amount == 0.0 {
@@ -108,6 +108,9 @@ fn main() -> Result<(), Error> {
 }
 
 fn handle_chargeback(accounts: &mut HashMap<u16, AccountInfo>, transaction_status: &mut HashMap<u16, HashMap<u32, TransactionStatus>>, client: &u16, trans_id: &u32) {
+    // handle_chargeback removes money from held and total  if a client exists and the transaction exists with a dispute
+    // chargeback will then update the account map (client -> account) with new numbers, moving an amount from held to available
+    // this will also update the transactions map in the case there is a future dispute
     let trans_status = transaction_status.get(&client);
 
     // deposit from client is reversed, which is a chargeback
@@ -131,6 +134,9 @@ fn handle_chargeback(accounts: &mut HashMap<u16, AccountInfo>, transaction_statu
 }
 
 fn handle_resolve(accounts: &mut HashMap<u16, AccountInfo>, transaction_status: &mut HashMap<u16, HashMap<u32, TransactionStatus>>, client: &u16, trans_id: &u32) {
+    // handle_resolve only moves money from held to available if a client exists and the transaction exists with a dispute
+    // resolve will then update the account map (client -> account) with new numbers, moving an amount from held to available
+    // this will also update the transactions map in the case there is a future dispute
     let trans_status = transaction_status.get(&client);
     if does_transaction_exist_with_dispute(&trans_id, trans_status) {
         let current_account = accounts.get(&client).unwrap();
@@ -151,6 +157,9 @@ fn handle_resolve(accounts: &mut HashMap<u16, AccountInfo>, transaction_status: 
 }
 
 fn handle_dispute(accounts: &mut HashMap<u16, AccountInfo>, transaction_status: &mut HashMap<u16, HashMap<u32, TransactionStatus>>, client: &u16, trans_id: &u32) {
+    // handle_dispute only moves money from available to held if a client exists and the transaction exists
+    // dispute will then update the account map (client -> account) with new numbers, moving an amount from available to held
+    // this will also update the transactions map in the case there is a future resolve/chargeback
     let trans_status = transaction_status.get(&client);
     if does_transaction_exist_without_dispute(&trans_id, trans_status) {
         let current_account = accounts.get(&client).unwrap();
@@ -171,27 +180,30 @@ fn handle_dispute(accounts: &mut HashMap<u16, AccountInfo>, transaction_status: 
 }
 
 fn does_transaction_exist_without_dispute(trans_id: &u32, trans_status: Option<&HashMap<u32, TransactionStatus>>) -> bool {
+    // used to find a transaction exists for a dispute record based on the transaction id
     does_transaction_exist(&trans_id, trans_status) && !trans_status.unwrap().get(&trans_id).unwrap().dispute
 }
 
 fn does_deposit_transaction_exist_with_dispute(trans_id: &u32, trans_status: Option<&HashMap<u32, TransactionStatus>>) -> bool {
+    // used to find a deposit transaction exists for a chargeback record based on the transaction id
     does_transaction_exist_with_dispute(trans_id, trans_status) && trans_status.unwrap().get(&trans_id).unwrap().deposit
 }
 
 fn does_transaction_exist_with_dispute(trans_id: &u32, trans_status: Option<&HashMap<u32, TransactionStatus>>) -> bool {
+    // used to find a transaction exists for a resolve record based on the transaction id
     does_transaction_exist(&trans_id, trans_status) && trans_status.unwrap().get(&trans_id).unwrap().dispute
 }
 
 fn does_transaction_exist(trans_id: &&u32, trans_status: Option<&HashMap<u32, TransactionStatus>>) -> bool {
+    // used to find a transaction exists for a dispute record
     !trans_status.is_none() && !trans_status.unwrap().get(&trans_id).is_none()
 }
 
 fn handle_withdrawal(accounts: &mut HashMap<u16, AccountInfo>, transactions: &mut HashMap<u16, HashMap<u32, TransactionStatus>>, amount: f64, client: &u16, trans_id: u32) {
-    // assumption:
-    // amount for withdrawal should be negative
-    // this was my thinking because if a withdrawal is reversed, that money should be returned to the account, right?
-    // if a deposit is reversed, the money should be taken away
-    let trans_status = TransactionStatus { amount: amount, deposit: false, dispute: false };
+    // handle_withdrawal only withdraws if a client exists with available funds over 0.0
+    // withdrawal will then update the account map (client -> account) with new numbers withdrawn
+    // this will also update the transactions map in the case there is a future dispute/resolve/chargeback
+    let trans_status = TransactionStatus { amount, deposit: false, dispute: false };
     let account = accounts.get(&client);
 
     if !account.is_none() {
@@ -210,7 +222,10 @@ fn handle_withdrawal(accounts: &mut HashMap<u16, AccountInfo>, transactions: &mu
     }
 }
 
-fn handle_deposit_record(accounts: &mut HashMap<u16, AccountInfo>, transactions: &mut HashMap<u16, HashMap<u32, TransactionStatus>>, amount: f64, client: &u16, trans_id: u32) {
+fn handle_deposit(accounts: &mut HashMap<u16, AccountInfo>, transactions: &mut HashMap<u16, HashMap<u32, TransactionStatus>>, amount: f64, client: &u16, trans_id: u32) {
+    // handle_deposit creates client if client does not exist
+    // deposit will then update the account map (client -> account) with new numbers deposited
+    // this will also update the transactions map in the case there is a future dispute/resolve/chargeback
     let trans_status = TransactionStatus { amount, deposit: true, dispute: false };
     let account = accounts.get(&client);
     if account.is_none() {
