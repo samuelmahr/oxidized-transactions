@@ -6,6 +6,7 @@ use csv::Error;
 use serde::Deserialize;
 use serde_with::{serde_as, DefaultOnError};
 
+#[derive(Debug)]
 struct AccountInfo {
     available: f64,
     held: f64,
@@ -13,6 +14,7 @@ struct AccountInfo {
     locked: bool,
 }
 
+#[derive(Debug)]
 struct TransactionStatus {
     amount: f64,
     // chargebacks should only happen on a deposit if i understand correctly
@@ -188,7 +190,7 @@ fn handle_withdrawal(accounts: &mut HashMap<u16, AccountInfo>, transactions: &mu
 
     if !account.is_none() {
         let current_account = account.unwrap();
-        if current_account.available - amount > 0.0 {
+        if current_account.available - amount >= 0.0 {
             let account_info = AccountInfo {
                 available: current_account.available - amount,
                 held: current_account.held,
@@ -269,6 +271,179 @@ fn is_client_locked(account: Option<&AccountInfo>) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_handle_withdrawal_with_new_account() {
+        let client: u16 = 1;
+        let trans_id: u32 = 1;
+        let amount: f64 = 1.0;
+
+        let mut accounts: HashMap<u16, AccountInfo> = HashMap::new();
+        let mut transactions: HashMap<u16, HashMap<u32, TransactionStatus>> = HashMap::new();
+
+        handle_withdrawal(&mut accounts, &mut transactions, amount, &client, trans_id);
+
+        // assert transaction exists
+        let trans_status = transactions.get(&client);
+        assert_eq!(trans_status.is_none(), true);
+
+        // assert account numbers
+        let account_info = accounts.get(&client);
+        assert_eq!(account_info.is_none(), true)
+    }
+
+    #[test]
+    fn test_handle_withdrawal_with_existing_account() {
+        let client: u16 = 1;
+        let deposit_trans_id: u32 = 1;
+        let withdrawal_trans_id: u32 = 2;
+        let amount: f64 = 1.0;
+
+        let mut accounts: HashMap<u16, AccountInfo> = HashMap::new();
+        let mut transactions: HashMap<u16, HashMap<u32, TransactionStatus>> = HashMap::new();
+
+        let expected_withdrawal_trans_status = TransactionStatus {
+            amount: 1.0,
+            deposit: false,
+            dispute: false,
+        };
+
+        let expected_account_info = AccountInfo{
+            available: 0.0,
+            held: 0.0,
+            total: 0.0,
+            locked: false
+        };
+        handle_deposit(&mut accounts, &mut transactions, amount, &client, deposit_trans_id);
+        handle_withdrawal(&mut accounts, &mut transactions, amount, &client, withdrawal_trans_id);
+
+        // assert transaction exists
+        let actual_trans_status = transactions.get(&client).unwrap().get(&withdrawal_trans_id).unwrap();
+        assert_eq!(expected_withdrawal_trans_status.amount, actual_trans_status.amount);
+        assert_eq!(expected_withdrawal_trans_status.deposit, actual_trans_status.deposit);
+        assert_eq!(expected_withdrawal_trans_status.dispute, actual_trans_status.dispute);
+
+        // assert account numbers
+        let actual_account_info = accounts.get(&client).unwrap();
+        assert_eq!(expected_account_info.available, actual_account_info.available);
+        assert_eq!(expected_account_info.held, actual_account_info.held);
+        assert_eq!(expected_account_info.total, actual_account_info.total);
+        assert_eq!(expected_account_info.locked, actual_account_info.locked);
+    }
+
+    #[test]
+    fn test_handle_withdrawal_with_existing_account_insufficient_funds() {
+        let client: u16 = 1;
+        let deposit_trans_id: u32 = 1;
+        let withdrawal_trans_id: u32 = 2;
+        let withdrawal_amount: f64 = 2.0;
+        let amount: f64 = 1.0;
+
+        let mut accounts: HashMap<u16, AccountInfo> = HashMap::new();
+        let mut transactions: HashMap<u16, HashMap<u32, TransactionStatus>> = HashMap::new();
+
+        let expected_account_info = AccountInfo{
+            available: 1.0,
+            held: 0.0,
+            total: 1.0,
+            locked: false
+        };
+
+        handle_deposit(&mut accounts, &mut transactions, amount, &client, deposit_trans_id);
+        handle_withdrawal(&mut accounts, &mut transactions, withdrawal_amount, &client, withdrawal_trans_id);
+
+        // assert transaction exists
+        let actual_trans_status = transactions.get(&client).unwrap().get(&withdrawal_trans_id);
+        assert_eq!(actual_trans_status.is_none(), true);
+
+        // assert account numbers
+        let actual_account_info = accounts.get(&client).unwrap();
+        assert_eq!(expected_account_info.available, actual_account_info.available);
+        assert_eq!(expected_account_info.held, actual_account_info.held);
+        assert_eq!(expected_account_info.total, actual_account_info.total);
+        assert_eq!(expected_account_info.locked, actual_account_info.locked);
+    }
+
+    #[test]
+    fn test_handle_deposit_with_new_account() {
+        let client: u16 = 1;
+        let trans_id: u32 = 1;
+        let amount: f64 = 1.0;
+
+        let mut accounts: HashMap<u16, AccountInfo> = HashMap::new();
+        let mut transactions: HashMap<u16, HashMap<u32, TransactionStatus>> = HashMap::new();
+
+        let expected_trans_status = TransactionStatus {
+            amount: 1.0,
+            deposit: true,
+            dispute: false,
+        };
+
+        let expected_account_info = AccountInfo{
+            available: 1.0,
+            held: 0.0,
+            total: 1.0,
+            locked: false
+        };
+
+        handle_deposit(&mut accounts, &mut transactions, amount, &client, trans_id);
+
+        // assert transaction exists
+        let actual_trans_status = transactions.get(&client).unwrap().get(&trans_id).unwrap();
+        assert_eq!(expected_trans_status.amount, actual_trans_status.amount);
+        assert_eq!(expected_trans_status.deposit, actual_trans_status.deposit);
+        assert_eq!(expected_trans_status.dispute, actual_trans_status.dispute);
+
+        // assert account numbers
+        let actual_account_info = accounts.get(&client).unwrap();
+        assert_eq!(expected_account_info.available, actual_account_info.available);
+        assert_eq!(expected_account_info.held, actual_account_info.held);
+        assert_eq!(expected_account_info.total, actual_account_info.total);
+        assert_eq!(expected_account_info.locked, actual_account_info.locked);
+    }
+
+    #[test]
+    fn test_handle_deposit_with_existing_account() {
+        let client: u16 = 1;
+        let trans_id: u32 = 1;
+        let amount: f64 = 1.0;
+
+        let trans_id2: u32 = 2;
+        let amount2: f64 = 2.0;
+
+        let mut accounts: HashMap<u16, AccountInfo> = HashMap::new();
+        let mut transactions: HashMap<u16, HashMap<u32, TransactionStatus>> = HashMap::new();
+
+
+        let expected_trans_status = TransactionStatus {
+            amount: 2.0,
+            deposit: true,
+            dispute: false,
+        };
+
+        let expected_account_info = AccountInfo{
+            available: 3.0,
+            held: 0.0,
+            total: 3.0,
+            locked: false
+        };
+
+        handle_deposit(&mut accounts, &mut transactions, amount, &client, trans_id);
+        handle_deposit(&mut accounts, &mut transactions, amount2, &client, trans_id2);
+
+        // assert second transaction exists
+        let actual_trans_status = transactions.get(&client).unwrap().get(&trans_id2).unwrap();
+        assert_eq!(expected_trans_status.amount, actual_trans_status.amount);
+        assert_eq!(expected_trans_status.deposit, actual_trans_status.deposit);
+        assert_eq!(expected_trans_status.dispute, actual_trans_status.dispute);
+
+        // assert account numbers
+        let actual_account_info = accounts.get(&client).unwrap();
+        assert_eq!(expected_account_info.available, actual_account_info.available);
+        assert_eq!(expected_account_info.held, actual_account_info.held);
+        assert_eq!(expected_account_info.total, actual_account_info.total);
+        assert_eq!(expected_account_info.locked, actual_account_info.locked);
+    }
 
     #[test]
     fn test_does_transaction_exist_without_dispute_has_dispute() {
