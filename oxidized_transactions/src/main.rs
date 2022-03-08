@@ -15,6 +15,8 @@ struct AccountInfo {
 
 struct TransactionStatus {
     amount: f64,
+    // chargebacks should only happen on a deposit if i understand correctly
+    deposit: bool,
     dispute: bool,
 }
 
@@ -85,22 +87,26 @@ fn main() -> Result<(), Error> {
         }
     }
 
-    println!("client,available,held,total");
+    println!("client,available,held,total,locked");
     for (client, account_info) in &accounts {
-        println!("{},{},{},{}", client, account_info.available, account_info.held, account_info.total);
+        println!("{},{},{},{},{}",
+                 client, account_info.available, account_info.held, account_info.total, account_info.locked);
     }
 
     Ok(())
 }
 fn handle_chargeback(accounts: &mut HashMap<u16, AccountInfo>, transaction_status: &mut HashMap<u16, HashMap<u32, TransactionStatus>>, client: &u16, trans_id: &u32) {
     let trans_status = transaction_status.get(&client);
-    if does_transaction_exist_with_dispute(&trans_id, trans_status) {
+
+    // deposit from client is reversed, which is a chargeback
+    // not checking chargebacks for withdrawals
+    if does_deposit_transaction_exist_with_dispute(&trans_id, trans_status) {
         let current_account = accounts.get(&client).unwrap();
         let dispute_amount = trans_status.unwrap().get(&trans_id).unwrap().amount;
         let account_info = AccountInfo {
-            available: current_account.available - dispute_amount,
+            available: current_account.available,
             held: current_account.held - dispute_amount,
-            total: current_account.held + current_account.available,
+            total: current_account.held + current_account.available - dispute_amount,
             locked: true,
         };
 
@@ -124,7 +130,8 @@ fn handle_resolve(accounts: &mut HashMap<u16, AccountInfo>, transaction_status: 
             locked: false,
         };
 
-        let updated_status = TransactionStatus { amount: dispute_amount, dispute: true };
+        let is_deposit = trans_status.unwrap().get(trans_id).unwrap().deposit;
+        let updated_status = TransactionStatus { amount: dispute_amount, deposit: is_deposit, dispute: true };
 
         accounts.insert(*client, account_info);
         transaction_status.get_mut(&client).unwrap().insert(*trans_id, updated_status);
@@ -143,7 +150,8 @@ fn handle_dispute(accounts: &mut HashMap<u16, AccountInfo>, transaction_status: 
             locked: false,
         };
 
-        let updated_status = TransactionStatus { amount: dispute_amount, dispute: true };
+        let is_deposit = trans_status.unwrap().get(trans_id).unwrap().deposit;
+        let updated_status = TransactionStatus { amount: dispute_amount, deposit: is_deposit, dispute: true };
 
         accounts.insert(*client, account_info);
         transaction_status.get_mut(&client).unwrap().insert(*trans_id, updated_status);
@@ -152,6 +160,10 @@ fn handle_dispute(accounts: &mut HashMap<u16, AccountInfo>, transaction_status: 
 
 fn does_transaction_exist_without_dispute(trans_id: &u32, trans_status: Option<&HashMap<u32, TransactionStatus>>) -> bool {
     does_transaction_exist(&trans_id, trans_status) && !trans_status.unwrap().get(&trans_id).unwrap().dispute
+}
+
+fn does_deposit_transaction_exist_with_dispute(trans_id: &u32, trans_status: Option<&HashMap<u32, TransactionStatus>>) -> bool {
+    does_transaction_exist_with_dispute(trans_id, trans_status) && trans_status.unwrap().get(&trans_id).unwrap().deposit
 }
 
 fn does_transaction_exist_with_dispute(trans_id: &u32, trans_status: Option<&HashMap<u32, TransactionStatus>>) -> bool {
@@ -163,7 +175,11 @@ fn does_transaction_exist(trans_id: &&u32, trans_status: Option<&HashMap<u32, Tr
 }
 
 fn handle_withdrawal(accounts: &mut HashMap<u16, AccountInfo>, transactions: &mut HashMap<u16, HashMap<u32, TransactionStatus>>, amount: f64, client: &u16, trans_id: u32) {
-    let trans_status = TransactionStatus { amount, dispute: false };
+    // assumption:
+    // amount for withdrawal should be negative
+    // this was my thinking because if a withdrawal is reversed, that money should be returned to the account, right?
+    // if a deposit is reversed, the money should be taken away
+    let trans_status = TransactionStatus { amount: amount, deposit: false, dispute: false };
     let account = accounts.get(&client);
 
     if !account.is_none() {
@@ -183,7 +199,7 @@ fn handle_withdrawal(accounts: &mut HashMap<u16, AccountInfo>, transactions: &mu
 }
 
 fn handle_deposit_record(accounts: &mut HashMap<u16, AccountInfo>, transactions: &mut HashMap<u16, HashMap<u32, TransactionStatus>>, amount: f64, client: &u16, trans_id: u32) {
-    let trans_status = TransactionStatus { amount, dispute: false };
+    let trans_status = TransactionStatus { amount, deposit: true, dispute: false };
     let account = accounts.get(&client);
     if account.is_none() {
         let account_info = AccountInfo {
