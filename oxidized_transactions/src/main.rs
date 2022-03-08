@@ -65,12 +65,23 @@ fn main() -> Result<(), Error> {
         let trans_type = transaction.trans_type.to_lowercase();
         let trans_id = transaction.id;
 
+        // only handles records with valid data
+        // amount can be 0.0 (default f64) in the case of withdrawal, dispute, chargeback
+        // exit early/go to next line if amount 0.0 for deposit or withdrawal, it is invalid
         if transaction.client > 0 && transaction.id > 0 && !is_client_locked(accounts.get(&client)) {
             match &*trans_type {
                 "deposit" => {
+                    if amount == 0.0 {
+                        continue
+                    }
+
                     handle_deposit_record(&mut accounts, &mut transaction_status, amount, &client, trans_id);
                 }
                 "withdrawal" => {
+                    if amount == 0.0 {
+                        continue
+                    }
+
                     handle_withdrawal(&mut accounts, &mut transaction_status, amount, &client, trans_id)
                 }
                 "dispute" => {
@@ -243,6 +254,149 @@ fn is_client_locked(account: Option<&AccountInfo>) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_does_transaction_exist_without_dispute_has_dispute() {
+        let trans_id: u32 = 1;
+        let trans_status = TransactionStatus{
+            amount: 1.0,
+            deposit: false,
+            dispute: true
+        };
+
+        let mut trans_map: HashMap<u32, TransactionStatus> = HashMap::new();
+        trans_map.insert(trans_id, trans_status);
+
+        let trans_map_opt: Option<&HashMap<u32, TransactionStatus>> = Option::Some(&trans_map);
+
+        assert_eq!(does_transaction_exist_without_dispute(&&trans_id, trans_map_opt), false);
+    }
+
+    #[test]
+    fn test_does_transaction_exist_without_dispute_no_dispute() {
+        let trans_id: u32 = 1;
+        let trans_status = TransactionStatus{
+            amount: 1.0,
+            deposit: false,
+            dispute: false
+        };
+
+        let mut trans_map: HashMap<u32, TransactionStatus> = HashMap::new();
+        trans_map.insert(trans_id, trans_status);
+
+        let trans_map_opt: Option<&HashMap<u32, TransactionStatus>> = Option::Some(&trans_map);
+
+        assert_eq!(does_transaction_exist_without_dispute(&&trans_id, trans_map_opt), true);
+    }
+
+    #[test]
+    fn test_does_deposit_transaction_exist_with_dispute_is_withdrawal() {
+        let trans_id: u32 = 1;
+        let trans_status = TransactionStatus{
+            amount: 1.0,
+            deposit: false,
+            dispute: true
+        };
+
+        let mut trans_map: HashMap<u32, TransactionStatus> = HashMap::new();
+        trans_map.insert(trans_id, trans_status);
+
+        let trans_map_opt: Option<&HashMap<u32, TransactionStatus>> = Option::Some(&trans_map);
+
+        assert_eq!(does_deposit_transaction_exist_with_dispute(&&trans_id, trans_map_opt), false);
+    }
+
+    #[test]
+    fn test_does_deposit_transaction_exist_with_dispute_is_deposit() {
+        let trans_id: u32 = 1;
+        let trans_status = TransactionStatus{
+            amount: 1.0,
+            deposit: true,
+            dispute: true
+        };
+
+        let mut trans_map: HashMap<u32, TransactionStatus> = HashMap::new();
+        trans_map.insert(trans_id, trans_status);
+
+        let trans_map_opt: Option<&HashMap<u32, TransactionStatus>> = Option::Some(&trans_map);
+
+        assert_eq!(does_deposit_transaction_exist_with_dispute(&&trans_id, trans_map_opt), true);
+    }
+
+    #[test]
+    fn test_does_transaction_exist_with_dispute_has_dispute() {
+        let trans_id: u32 = 1;
+        let trans_status = TransactionStatus{
+            amount: 1.0,
+            deposit: false,
+            dispute: true
+        };
+
+        let mut trans_map: HashMap<u32, TransactionStatus> = HashMap::new();
+        trans_map.insert(trans_id, trans_status);
+
+        let trans_map_opt: Option<&HashMap<u32, TransactionStatus>> = Option::Some(&trans_map);
+
+        assert_eq!(does_transaction_exist_with_dispute(&&trans_id, trans_map_opt), true);
+    }
+
+    #[test]
+    fn test_does_transaction_exist_with_dispute_no_dispute() {
+        let trans_id: u32 = 1;
+        let trans_status = TransactionStatus{
+            amount: 1.0,
+            deposit: false,
+            dispute: false
+        };
+
+        let mut trans_map: HashMap<u32, TransactionStatus> = HashMap::new();
+        trans_map.insert(trans_id, trans_status);
+
+        let trans_map_opt: Option<&HashMap<u32, TransactionStatus>> = Option::Some(&trans_map);
+
+        assert_eq!(does_transaction_exist_with_dispute(&&trans_id, trans_map_opt), false);
+    }
+
+    #[test]
+    fn test_does_transaction_exist_no_transaction_map() {
+        let trans_id: u32 = 1;
+        assert_eq!(does_transaction_exist(&&trans_id, None), false);
+    }
+
+    #[test]
+    fn test_does_transaction_exist_no_key_in_transaction_map() {
+        let trans_id: u32 = 1;
+        let other_trans_id: u32 = 2;
+        let trans_status = TransactionStatus{
+            amount: 1.0,
+            deposit: false,
+            dispute: false
+        };
+
+        let mut trans_map: HashMap<u32, TransactionStatus> = HashMap::new();
+        trans_map.insert(other_trans_id, trans_status);
+
+        let trans_map_opt: Option<&HashMap<u32, TransactionStatus>> = Option::Some(&trans_map);
+
+        assert_eq!(does_transaction_exist(&&trans_id, trans_map_opt), false);
+    }
+
+    #[test]
+    fn test_does_transaction_exist_with_transaction() {
+        let trans_id: u32 = 1;
+        let trans_status = TransactionStatus{
+            amount: 1.0,
+            deposit: false,
+            dispute: false
+        };
+
+        let mut trans_map: HashMap<u32, TransactionStatus> = HashMap::new();
+        trans_map.insert(trans_id, trans_status);
+
+        let trans_map_opt: Option<&HashMap<u32, TransactionStatus>> = Option::Some(&trans_map);
+
+        assert_eq!(does_transaction_exist(&&trans_id, trans_map_opt), true);
+    }
 
     #[test]
     fn test_is_client_locked_none_account() {
