@@ -155,7 +155,7 @@ fn handle_resolve(accounts: &mut HashMap<u16, AccountInfo>, transaction_status: 
         };
 
         let is_deposit = trans_status.unwrap().get(trans_id).unwrap().deposit;
-        let updated_status = TransactionStatus { amount: dispute_amount, deposit: is_deposit, dispute: true };
+        let updated_status = TransactionStatus { amount: dispute_amount, deposit: is_deposit, dispute: false };
 
         accounts.insert(*client, account_info);
         transaction_status.get_mut(&client).unwrap().insert(*trans_id, updated_status);
@@ -275,6 +275,361 @@ fn is_client_locked(account: Option<&AccountInfo>) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_handle_chargeback_with_deposit_disputed() {
+        let client: u16 = 1;
+        let trans_id: u32 = 1;
+        let amount: f64 = 1.0;
+
+        let trans_id2: u32 = 2;
+        let amount2: f64 = 2.0;
+
+        let mut accounts: HashMap<u16, AccountInfo> = HashMap::new();
+        let mut transactions: HashMap<u16, HashMap<u32, TransactionStatus>> = HashMap::new();
+
+        let expected_account_info = AccountInfo{
+            available: 1.0,
+            held: 0.0,
+            total: 1.0,
+            locked: true
+        };
+
+        handle_deposit(&mut accounts, &mut transactions, amount, &client, trans_id);
+        handle_deposit(&mut accounts, &mut transactions, amount2, &client, trans_id2);
+        handle_dispute(&mut accounts, &mut transactions, &client, &trans_id2);
+        handle_chargeback(&mut accounts, &mut transactions, &client, &trans_id2);
+
+        // client transactions are removed from transactions map, do nothing now that account locked
+        let client_transactions = transactions.get(&client);
+        assert_eq!(client_transactions.is_none(), true);
+
+        // assert account numbers
+        let actual_account_info = accounts.get(&client).unwrap();
+        assert_eq!(expected_account_info.available, actual_account_info.available);
+        assert_eq!(expected_account_info.held, actual_account_info.held);
+        assert_eq!(expected_account_info.total, actual_account_info.total);
+        assert_eq!(expected_account_info.locked, actual_account_info.locked);
+    }
+
+    #[test]
+    fn test_handle_chargeback_with_chargeback_duplicated() {
+        let client: u16 = 1;
+        let trans_id: u32 = 1;
+        let amount: f64 = 1.0;
+
+        let trans_id2: u32 = 2;
+        let amount2: f64 = 2.0;
+
+        let mut accounts: HashMap<u16, AccountInfo> = HashMap::new();
+        let mut transactions: HashMap<u16, HashMap<u32, TransactionStatus>> = HashMap::new();
+
+        let expected_account_info = AccountInfo{
+            available: 1.0,
+            held: 0.0,
+            total: 1.0,
+            locked: true
+        };
+
+        handle_deposit(&mut accounts, &mut transactions, amount, &client, trans_id);
+        handle_deposit(&mut accounts, &mut transactions, amount2, &client, trans_id2);
+        handle_dispute(&mut accounts, &mut transactions, &client, &trans_id2);
+        handle_chargeback(&mut accounts, &mut transactions, &client, &trans_id2);
+        handle_chargeback(&mut accounts, &mut transactions, &client, &trans_id2);
+
+        // client transactions are removed from transactions map, do nothing now that account locked
+        let client_transactions = transactions.get(&client);
+        assert_eq!(client_transactions.is_none(), true);
+
+        // assert account numbers
+        let actual_account_info = accounts.get(&client).unwrap();
+        assert_eq!(expected_account_info.available, actual_account_info.available);
+        assert_eq!(expected_account_info.held, actual_account_info.held);
+        assert_eq!(expected_account_info.total, actual_account_info.total);
+        assert_eq!(expected_account_info.locked, actual_account_info.locked);
+    }
+
+    #[test]
+    fn test_handle_chargeback_with_nonexistent_transaction_id() {
+        let client: u16 = 1;
+        let trans_id: u32 = 1;
+        let amount: f64 = 1.0;
+
+        let trans_id2: u32 = 2;
+        let amount2: f64 = 2.0;
+
+        let bad_id: u32 = 3;
+
+        let mut accounts: HashMap<u16, AccountInfo> = HashMap::new();
+        let mut transactions: HashMap<u16, HashMap<u32, TransactionStatus>> = HashMap::new();
+
+        // funds stays held, no reversal
+        let expected_account_info = AccountInfo{
+            available: 1.0,
+            held: 2.0,
+            total: 3.0,
+            locked: false
+        };
+
+        handle_deposit(&mut accounts, &mut transactions, amount, &client, trans_id);
+        handle_deposit(&mut accounts, &mut transactions, amount2, &client, trans_id2);
+        handle_dispute(&mut accounts, &mut transactions, &client, &trans_id2);
+        handle_chargeback(&mut accounts, &mut transactions, &client, &bad_id);
+
+        let actual_account_info = accounts.get(&client).unwrap();
+        assert_eq!(expected_account_info.available, actual_account_info.available);
+        assert_eq!(expected_account_info.held, actual_account_info.held);
+        assert_eq!(expected_account_info.total, actual_account_info.total);
+        assert_eq!(expected_account_info.locked, actual_account_info.locked);
+    }
+
+    #[test]
+    fn test_handle_resolve_with_deposit_disputed() {
+        let client: u16 = 1;
+        let trans_id: u32 = 1;
+        let amount: f64 = 1.0;
+
+        let trans_id2: u32 = 2;
+        let amount2: f64 = 2.0;
+
+        let mut accounts: HashMap<u16, AccountInfo> = HashMap::new();
+        let mut transactions: HashMap<u16, HashMap<u32, TransactionStatus>> = HashMap::new();
+
+        // dispute resolved, expect false dispute
+        let expected_trans_status = TransactionStatus {
+            amount: 2.0,
+            deposit: true,
+            dispute: false,
+        };
+
+        let expected_account_info = AccountInfo{
+            available: 3.0,
+            held: 0.0,
+            total: 3.0,
+            locked: false
+        };
+
+        handle_deposit(&mut accounts, &mut transactions, amount, &client, trans_id);
+        handle_deposit(&mut accounts, &mut transactions, amount2, &client, trans_id2);
+        handle_dispute(&mut accounts, &mut transactions, &client, &trans_id2);
+        handle_resolve(&mut accounts, &mut transactions, &client, &trans_id2);
+
+        // assert second transaction exists
+        let actual_trans_status = transactions.get(&client).unwrap().get(&trans_id2).unwrap();
+        assert_eq!(expected_trans_status.amount, actual_trans_status.amount);
+        assert_eq!(expected_trans_status.deposit, actual_trans_status.deposit);
+        assert_eq!(expected_trans_status.dispute, actual_trans_status.dispute);
+
+        // assert account numbers
+        let actual_account_info = accounts.get(&client).unwrap();
+        assert_eq!(expected_account_info.available, actual_account_info.available);
+        assert_eq!(expected_account_info.held, actual_account_info.held);
+        assert_eq!(expected_account_info.total, actual_account_info.total);
+        assert_eq!(expected_account_info.locked, actual_account_info.locked);
+    }
+
+    #[test]
+    fn test_handle_resolve_with_resolve_duplicated() {
+        let client: u16 = 1;
+        let trans_id: u32 = 1;
+        let amount: f64 = 1.0;
+
+        let trans_id2: u32 = 2;
+        let amount2: f64 = 2.0;
+
+        let mut accounts: HashMap<u16, AccountInfo> = HashMap::new();
+        let mut transactions: HashMap<u16, HashMap<u32, TransactionStatus>> = HashMap::new();
+
+        // dispute resolved, expect false dispute
+        let expected_trans_status = TransactionStatus {
+            amount: 2.0,
+            deposit: true,
+            dispute: false,
+        };
+
+        let expected_account_info = AccountInfo{
+            available: 3.0,
+            held: 0.0,
+            total: 3.0,
+            locked: false
+        };
+
+        handle_deposit(&mut accounts, &mut transactions, amount, &client, trans_id);
+        handle_deposit(&mut accounts, &mut transactions, amount2, &client, trans_id2);
+        handle_dispute(&mut accounts, &mut transactions, &client, &trans_id2);
+        handle_resolve(&mut accounts, &mut transactions, &client, &trans_id2);
+        handle_resolve(&mut accounts, &mut transactions, &client, &trans_id2);
+
+        // assert second transaction exists
+        let actual_trans_status = transactions.get(&client).unwrap().get(&trans_id2).unwrap();
+        assert_eq!(expected_trans_status.amount, actual_trans_status.amount);
+        assert_eq!(expected_trans_status.deposit, actual_trans_status.deposit);
+        assert_eq!(expected_trans_status.dispute, actual_trans_status.dispute);
+
+        // assert account numbers
+        let actual_account_info = accounts.get(&client).unwrap();
+        assert_eq!(expected_account_info.available, actual_account_info.available);
+        assert_eq!(expected_account_info.held, actual_account_info.held);
+        assert_eq!(expected_account_info.total, actual_account_info.total);
+        assert_eq!(expected_account_info.locked, actual_account_info.locked);
+    }
+
+    #[test]
+    fn test_handle_resolve_with_nonexistent_transaction_id() {
+        let client: u16 = 1;
+        let trans_id: u32 = 1;
+        let amount: f64 = 1.0;
+
+        let trans_id2: u32 = 2;
+        let amount2: f64 = 2.0;
+
+        let bad_id: u32 = 3;
+
+        let mut accounts: HashMap<u16, AccountInfo> = HashMap::new();
+        let mut transactions: HashMap<u16, HashMap<u32, TransactionStatus>> = HashMap::new();
+
+        // funds stays held
+        let expected_account_info = AccountInfo{
+            available: 1.0,
+            held: 2.0,
+            total: 3.0,
+            locked: false
+        };
+
+        handle_deposit(&mut accounts, &mut transactions, amount, &client, trans_id);
+        handle_deposit(&mut accounts, &mut transactions, amount2, &client, trans_id2);
+        handle_dispute(&mut accounts, &mut transactions, &client, &trans_id2);
+        handle_resolve(&mut accounts, &mut transactions, &client, &bad_id);
+
+        let actual_account_info = accounts.get(&client).unwrap();
+        assert_eq!(expected_account_info.available, actual_account_info.available);
+        assert_eq!(expected_account_info.held, actual_account_info.held);
+        assert_eq!(expected_account_info.total, actual_account_info.total);
+        assert_eq!(expected_account_info.locked, actual_account_info.locked);
+    }
+
+    #[test]
+    fn test_handle_dispute_with_deposits() {
+        let client: u16 = 1;
+        let trans_id: u32 = 1;
+        let amount: f64 = 1.0;
+
+        let trans_id2: u32 = 2;
+        let amount2: f64 = 2.0;
+
+        let mut accounts: HashMap<u16, AccountInfo> = HashMap::new();
+        let mut transactions: HashMap<u16, HashMap<u32, TransactionStatus>> = HashMap::new();
+
+
+        let expected_trans_status = TransactionStatus {
+            amount: 2.0,
+            deposit: true,
+            dispute: true,
+        };
+
+        let expected_account_info = AccountInfo{
+            available: 1.0,
+            held: 2.0,
+            total: 3.0,
+            locked: false
+        };
+
+        handle_deposit(&mut accounts, &mut transactions, amount, &client, trans_id);
+        handle_deposit(&mut accounts, &mut transactions, amount2, &client, trans_id2);
+        handle_dispute(&mut accounts, &mut transactions, &client, &trans_id2);
+
+        // assert second transaction exists
+        let actual_trans_status = transactions.get(&client).unwrap().get(&trans_id2).unwrap();
+        assert_eq!(expected_trans_status.amount, actual_trans_status.amount);
+        assert_eq!(expected_trans_status.deposit, actual_trans_status.deposit);
+        assert_eq!(expected_trans_status.dispute, actual_trans_status.dispute);
+
+        // assert account numbers
+        let actual_account_info = accounts.get(&client).unwrap();
+        assert_eq!(expected_account_info.available, actual_account_info.available);
+        assert_eq!(expected_account_info.held, actual_account_info.held);
+        assert_eq!(expected_account_info.total, actual_account_info.total);
+        assert_eq!(expected_account_info.locked, actual_account_info.locked);
+    }
+
+    #[test]
+    fn test_handle_dispute_with_duplicate_dispute() {
+        // should not move to held funds more than once
+
+        let client: u16 = 1;
+        let trans_id: u32 = 1;
+        let amount: f64 = 1.0;
+
+        let trans_id2: u32 = 2;
+        let amount2: f64 = 2.0;
+
+        let mut accounts: HashMap<u16, AccountInfo> = HashMap::new();
+        let mut transactions: HashMap<u16, HashMap<u32, TransactionStatus>> = HashMap::new();
+
+
+        let expected_trans_status = TransactionStatus {
+            amount: 2.0,
+            deposit: true,
+            dispute: true,
+        };
+
+        let expected_account_info = AccountInfo{
+            available: 1.0,
+            held: 2.0,
+            total: 3.0,
+            locked: false
+        };
+
+        handle_deposit(&mut accounts, &mut transactions, amount, &client, trans_id);
+        handle_deposit(&mut accounts, &mut transactions, amount2, &client, trans_id2);
+        handle_dispute(&mut accounts, &mut transactions, &client, &trans_id2);
+        handle_dispute(&mut accounts, &mut transactions, &client, &trans_id2);
+
+        // assert second transaction exists
+        let actual_trans_status = transactions.get(&client).unwrap().get(&trans_id2).unwrap();
+        assert_eq!(expected_trans_status.amount, actual_trans_status.amount);
+        assert_eq!(expected_trans_status.deposit, actual_trans_status.deposit);
+        assert_eq!(expected_trans_status.dispute, actual_trans_status.dispute);
+
+        // assert account numbers
+        let actual_account_info = accounts.get(&client).unwrap();
+        assert_eq!(expected_account_info.available, actual_account_info.available);
+        assert_eq!(expected_account_info.held, actual_account_info.held);
+        assert_eq!(expected_account_info.total, actual_account_info.total);
+        assert_eq!(expected_account_info.locked, actual_account_info.locked);
+    }
+
+    #[test]
+    fn test_handle_dispute_with_nonexistent_transaction_id() {
+        let client: u16 = 1;
+        let trans_id: u32 = 1;
+        let amount: f64 = 1.0;
+
+        let trans_id2: u32 = 2;
+        let amount2: f64 = 2.0;
+
+        let bad_id: u32 = 3;
+
+        let mut accounts: HashMap<u16, AccountInfo> = HashMap::new();
+        let mut transactions: HashMap<u16, HashMap<u32, TransactionStatus>> = HashMap::new();
+
+        let expected_account_info = AccountInfo{
+            available: 3.0,
+            held: 0.0,
+            total: 3.0,
+            locked: false
+        };
+
+        handle_deposit(&mut accounts, &mut transactions, amount, &client, trans_id);
+        handle_deposit(&mut accounts, &mut transactions, amount2, &client, trans_id2);
+        handle_dispute(&mut accounts, &mut transactions, &client, &bad_id);
+
+        let actual_account_info = accounts.get(&client).unwrap();
+        assert_eq!(expected_account_info.available, actual_account_info.available);
+        assert_eq!(expected_account_info.held, actual_account_info.held);
+        assert_eq!(expected_account_info.total, actual_account_info.total);
+        assert_eq!(expected_account_info.locked, actual_account_info.locked);
+    }
 
     #[test]
     fn test_handle_withdrawal_with_new_account() {
