@@ -239,3 +239,41 @@ fn is_client_locked(account: Option<&AccountInfo>) -> bool {
 
     return false;
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_is_client_locked_none_account() {
+        assert_eq!(is_client_locked(None), false);
+    }
+
+    #[test]
+    fn test_is_client_locked_with_account_unlocked() {
+        let account = AccountInfo{
+            available: 0.0,
+            held: 0.0,
+            total: 0.0,
+            locked: false
+        };
+
+        let account_opt: Option<&AccountInfo> = Option::Some(&account);
+
+        assert_eq!(is_client_locked(account_opt), false);
+    }
+
+    #[test]
+    fn test_is_client_locked_with_account_locked() {
+        let account = AccountInfo{
+            available: 0.0,
+            held: 0.0,
+            total: 0.0,
+            locked: true
+        };
+
+        let account_opt: Option<&AccountInfo> = Option::Some(&account);
+
+        assert_eq!(is_client_locked(account_opt), true);
+    }
+}
