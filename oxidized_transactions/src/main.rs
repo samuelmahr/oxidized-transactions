@@ -72,14 +72,14 @@ fn main() -> Result<(), Error> {
             match &*trans_type {
                 "deposit" => {
                     if amount == 0.0 {
-                        continue
+                        continue;
                     }
 
                     handle_deposit(&mut accounts, &mut transaction_status, amount, &client, trans_id);
                 }
                 "withdrawal" => {
                     if amount == 0.0 {
-                        continue
+                        continue;
                     }
 
                     handle_withdrawal(&mut accounts, &mut transaction_status, amount, &client, trans_id)
@@ -179,26 +179,6 @@ fn handle_dispute(accounts: &mut HashMap<u16, AccountInfo>, transaction_status: 
     }
 }
 
-fn does_transaction_exist_without_dispute(trans_id: &u32, trans_status: Option<&HashMap<u32, TransactionStatus>>) -> bool {
-    // used to find a transaction exists for a dispute record based on the transaction id
-    does_transaction_exist(&trans_id, trans_status) && !trans_status.unwrap().get(&trans_id).unwrap().dispute
-}
-
-fn does_deposit_transaction_exist_with_dispute(trans_id: &u32, trans_status: Option<&HashMap<u32, TransactionStatus>>) -> bool {
-    // used to find a deposit transaction exists for a chargeback record based on the transaction id
-    does_transaction_exist_with_dispute(trans_id, trans_status) && trans_status.unwrap().get(&trans_id).unwrap().deposit
-}
-
-fn does_transaction_exist_with_dispute(trans_id: &u32, trans_status: Option<&HashMap<u32, TransactionStatus>>) -> bool {
-    // used to find a transaction exists for a resolve record based on the transaction id
-    does_transaction_exist(&trans_id, trans_status) && trans_status.unwrap().get(&trans_id).unwrap().dispute
-}
-
-fn does_transaction_exist(trans_id: &&u32, trans_status: Option<&HashMap<u32, TransactionStatus>>) -> bool {
-    // used to find a transaction exists for a dispute record
-    !trans_status.is_none() && !trans_status.unwrap().get(&trans_id).is_none()
-}
-
 fn handle_withdrawal(accounts: &mut HashMap<u16, AccountInfo>, transactions: &mut HashMap<u16, HashMap<u32, TransactionStatus>>, amount: f64, client: &u16, trans_id: u32) {
     // handle_withdrawal only withdraws if a client exists with available funds over 0.0
     // withdrawal will then update the account map (client -> account) with new numbers withdrawn
@@ -258,6 +238,26 @@ fn handle_deposit(accounts: &mut HashMap<u16, AccountInfo>, transactions: &mut H
     }
 }
 
+fn does_transaction_exist_without_dispute(trans_id: &u32, trans_status: Option<&HashMap<u32, TransactionStatus>>) -> bool {
+    // used to find a transaction exists for a dispute record based on the transaction id
+    does_transaction_exist(&trans_id, trans_status) && !trans_status.unwrap().get(&trans_id).unwrap().dispute
+}
+
+fn does_deposit_transaction_exist_with_dispute(trans_id: &u32, trans_status: Option<&HashMap<u32, TransactionStatus>>) -> bool {
+    // used to find a deposit transaction exists for a chargeback record based on the transaction id
+    does_transaction_exist_with_dispute(trans_id, trans_status) && trans_status.unwrap().get(&trans_id).unwrap().deposit
+}
+
+fn does_transaction_exist_with_dispute(trans_id: &u32, trans_status: Option<&HashMap<u32, TransactionStatus>>) -> bool {
+    // used to find a transaction exists for a resolve record based on the transaction id
+    does_transaction_exist(&trans_id, trans_status) && trans_status.unwrap().get(&trans_id).unwrap().dispute
+}
+
+fn does_transaction_exist(trans_id: &&u32, trans_status: Option<&HashMap<u32, TransactionStatus>>) -> bool {
+    // used to find a transaction exists for a dispute record
+    !trans_status.is_none() && !trans_status.unwrap().get(&trans_id).is_none()
+}
+
 fn is_client_locked(account: Option<&AccountInfo>) -> bool {
     if !account.is_none() {
         return account.unwrap().locked;
@@ -273,10 +273,10 @@ mod tests {
     #[test]
     fn test_does_transaction_exist_without_dispute_has_dispute() {
         let trans_id: u32 = 1;
-        let trans_status = TransactionStatus{
+        let trans_status = TransactionStatus {
             amount: 1.0,
             deposit: false,
-            dispute: true
+            dispute: true,
         };
 
         let mut trans_map: HashMap<u32, TransactionStatus> = HashMap::new();
@@ -290,10 +290,10 @@ mod tests {
     #[test]
     fn test_does_transaction_exist_without_dispute_no_dispute() {
         let trans_id: u32 = 1;
-        let trans_status = TransactionStatus{
+        let trans_status = TransactionStatus {
             amount: 1.0,
             deposit: false,
-            dispute: false
+            dispute: false,
         };
 
         let mut trans_map: HashMap<u32, TransactionStatus> = HashMap::new();
@@ -307,10 +307,10 @@ mod tests {
     #[test]
     fn test_does_deposit_transaction_exist_with_dispute_is_withdrawal() {
         let trans_id: u32 = 1;
-        let trans_status = TransactionStatus{
+        let trans_status = TransactionStatus {
             amount: 1.0,
             deposit: false,
-            dispute: true
+            dispute: true,
         };
 
         let mut trans_map: HashMap<u32, TransactionStatus> = HashMap::new();
@@ -324,10 +324,10 @@ mod tests {
     #[test]
     fn test_does_deposit_transaction_exist_with_dispute_is_deposit() {
         let trans_id: u32 = 1;
-        let trans_status = TransactionStatus{
+        let trans_status = TransactionStatus {
             amount: 1.0,
             deposit: true,
-            dispute: true
+            dispute: true,
         };
 
         let mut trans_map: HashMap<u32, TransactionStatus> = HashMap::new();
@@ -341,10 +341,10 @@ mod tests {
     #[test]
     fn test_does_transaction_exist_with_dispute_has_dispute() {
         let trans_id: u32 = 1;
-        let trans_status = TransactionStatus{
+        let trans_status = TransactionStatus {
             amount: 1.0,
             deposit: false,
-            dispute: true
+            dispute: true,
         };
 
         let mut trans_map: HashMap<u32, TransactionStatus> = HashMap::new();
@@ -358,10 +358,10 @@ mod tests {
     #[test]
     fn test_does_transaction_exist_with_dispute_no_dispute() {
         let trans_id: u32 = 1;
-        let trans_status = TransactionStatus{
+        let trans_status = TransactionStatus {
             amount: 1.0,
             deposit: false,
-            dispute: false
+            dispute: false,
         };
 
         let mut trans_map: HashMap<u32, TransactionStatus> = HashMap::new();
@@ -382,10 +382,10 @@ mod tests {
     fn test_does_transaction_exist_no_key_in_transaction_map() {
         let trans_id: u32 = 1;
         let other_trans_id: u32 = 2;
-        let trans_status = TransactionStatus{
+        let trans_status = TransactionStatus {
             amount: 1.0,
             deposit: false,
-            dispute: false
+            dispute: false,
         };
 
         let mut trans_map: HashMap<u32, TransactionStatus> = HashMap::new();
@@ -399,10 +399,10 @@ mod tests {
     #[test]
     fn test_does_transaction_exist_with_transaction() {
         let trans_id: u32 = 1;
-        let trans_status = TransactionStatus{
+        let trans_status = TransactionStatus {
             amount: 1.0,
             deposit: false,
-            dispute: false
+            dispute: false,
         };
 
         let mut trans_map: HashMap<u32, TransactionStatus> = HashMap::new();
@@ -420,11 +420,11 @@ mod tests {
 
     #[test]
     fn test_is_client_locked_with_account_unlocked() {
-        let account = AccountInfo{
+        let account = AccountInfo {
             available: 0.0,
             held: 0.0,
             total: 0.0,
-            locked: false
+            locked: false,
         };
 
         let account_opt: Option<&AccountInfo> = Option::Some(&account);
@@ -434,11 +434,11 @@ mod tests {
 
     #[test]
     fn test_is_client_locked_with_account_locked() {
-        let account = AccountInfo{
+        let account = AccountInfo {
             available: 0.0,
             held: 0.0,
             total: 0.0,
-            locked: true
+            locked: true,
         };
 
         let account_opt: Option<&AccountInfo> = Option::Some(&account);
