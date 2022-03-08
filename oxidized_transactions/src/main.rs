@@ -95,6 +95,7 @@ fn main() -> Result<(), Error> {
 
     Ok(())
 }
+
 fn handle_chargeback(accounts: &mut HashMap<u16, AccountInfo>, transaction_status: &mut HashMap<u16, HashMap<u32, TransactionStatus>>, client: &u16, trans_id: &u32) {
     let trans_status = transaction_status.get(&client);
 
